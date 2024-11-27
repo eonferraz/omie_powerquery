@@ -1,0 +1,46 @@
+let
+    BaseURL = "https://app.omie.com.br/api/v1/geral/categorias/",
+    AppKey = "4971038695623",
+    AppSecret = "6e483436750893445cfa5d2517d72c19",
+    RegPorPagina = 50,
+
+    // Função para buscar uma página específica
+    GetPage = (Pagina as number) =>
+        let
+            Body = "{
+                ""call"":""ListarCategorias"",
+                ""app_key"":""" & AppKey & """,
+                ""app_secret"":""" & AppSecret & """,
+                ""param"":[
+                    {
+                        ""pagina"": " & Text.From(Pagina) & ",
+                        ""registros_por_pagina"": " & Text.From(RegPorPagina) & "
+                    }
+                ]
+            }",
+            Response = Json.Document(Web.Contents(BaseURL, [
+                Headers = [#"Content-Type" = "application/json"],
+                Content = Text.ToBinary(Body)
+            ])),
+            Categorias = try Response[categoria_cadastro] otherwise null
+        in
+            Categorias,
+
+    // Função para iterar por todas as páginas
+    FetchAllPages = List.Generate(
+        () => [Pagina = 1, Result = GetPage(1)],
+        each List.NonNullCount([Result]) > 0,
+        each [Pagina = [Pagina] + 1, Result = GetPage([Pagina])],
+        each [Result]
+    ),
+
+    // Combina os resultados de todas as páginas
+    FlattenedData = List.Combine(FetchAllPages),
+
+    // Converte os dados combinados em uma tabela
+    TableData = Table.FromList(FlattenedData, Splitter.SplitByNothing(), null, null, ExtraValues.Error),
+
+    // Expande colunas da tabela conforme a necessidade
+    ExpandedData = Table.ExpandRecordColumn(TableData, "Column1", {"categoria_superior", "codigo", "codigo_dre", "conta_despesa", "conta_inativa", "conta_receita", "dadosDRE", "definida_pelo_usuario", "descricao", "descricao_padrao", "id_conta_contabil", "nao_exibir", "natureza", "tag_conta_contabil", "tipo_categoria", "totalizadora", "transferencia"})
+in
+    ExpandedData
